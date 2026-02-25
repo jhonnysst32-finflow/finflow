@@ -1,38 +1,40 @@
 import { useState, useEffect } from "react";
 import { supabase } from "./supabase.js";
 import TelaLogin from "./TelaLogin.jsx";
+import TelaAdmin from "./TelaAdmin.jsx";
 import ControleFinanceiro from "./ControleFinanceiro.jsx";
 import PaginaCanal from "./PaginaCanal.jsx";
 import PopupNotificacoes from "./PopupNotificacoes.jsx";
+
+const ADMIN_EMAIL = "jhonny.sst32@gmail.com";
 
 export default function App() {
   const [sessao,  setSessao]  = useState(null);
   const [loading, setLoading] = useState(true);
   const [modulo,  setModulo]  = useState("financeiro");
+  const [modoAdmin, setModoAdmin] = useState(false);
 
-  // Escuta mudanças de sessão do Supabase
   useEffect(() => {
-    // Sessão inicial
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSessao(session);
       setLoading(false);
     });
-
-    // Listener de auth (login, logout, token refresh)
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSessao(session);
       setLoading(false);
     });
-
     return () => subscription.unsubscribe();
   }, []);
 
   const logout = async () => {
     await supabase.auth.signOut();
     setSessao(null);
+    setModoAdmin(false);
   };
 
-  // Carregando sessão
+  const isAdmin = sessao?.user?.email === ADMIN_EMAIL;
+
+  // ── Carregando ──────────────────────────────────────────────────────────────
   if (loading) {
     return (
       <div style={{ minHeight:"100vh", background:"#F7F5F1", display:"flex", alignItems:"center", justifyContent:"center", fontFamily:"'DM Sans',sans-serif" }}>
@@ -44,17 +46,20 @@ export default function App() {
     );
   }
 
-  // Não logado
-  if (!sessao) {
-    return <TelaLogin onLogin={() => {}} />;
+  // ── Não logado ──────────────────────────────────────────────────────────────
+  if (!sessao) return <TelaLogin onLogin={()=>{}} />;
+
+  // ── Admin em modo admin ─────────────────────────────────────────────────────
+  if (isAdmin && modoAdmin) {
+    return <TelaAdmin adminEmail={sessao.user.email} onSair={()=>setModoAdmin(false)} />;
   }
 
-  // Logado
+  // ── App normal ──────────────────────────────────────────────────────────────
   return (
     <div>
       <PopupNotificacoes userId={sessao.user.id} />
 
-      {/* Switcher de módulo + logout */}
+      {/* Barra flutuante */}
       <div style={{
         position:"fixed", bottom:24, right:24, zIndex:200,
         display:"flex", gap:8, alignItems:"center",
@@ -80,8 +85,16 @@ export default function App() {
 
         <div style={{ width:1, height:20, background:"#E8E3DB" }}/>
 
-        {/* Info do usuário */}
-        <span style={{ fontSize:12, color:"#A09080", maxWidth:140, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+        {/* Botão admin — só visível para o admin */}
+        {isAdmin && (
+          <button onClick={()=>setModoAdmin(true)} title="Painel Admin" style={{
+            border:"none", borderRadius:10, padding:"8px 10px",
+            fontFamily:"'DM Sans',sans-serif", fontSize:13,
+            cursor:"pointer", background:"transparent", color:"#8B6BB5",
+          }}>🛡️</button>
+        )}
+
+        <span style={{ fontSize:11, color:"#C0B8A8", maxWidth:120, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
           {sessao.user.email}
         </span>
 

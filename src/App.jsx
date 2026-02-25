@@ -1,53 +1,58 @@
 import { useState, useEffect } from "react";
+import { supabase } from "./supabase.js";
 import TelaLogin from "./TelaLogin.jsx";
 import ControleFinanceiro from "./ControleFinanceiro.jsx";
 import PaginaCanal from "./PaginaCanal.jsx";
 import PopupNotificacoes from "./PopupNotificacoes.jsx";
 
-// Read persisted state for popup (same keys used in ControleFinanceiro)
-function readLS(key, def) {
-  try { const s = localStorage.getItem("ff_" + key); return s ? JSON.parse(s) : def; } catch { return def; }
-}
-
 export default function App() {
-  const [logado, setLogado] = useState(() => {
-    try { return localStorage.getItem("ff_auth") === "1"; } catch { return false; }
-  });
-  const [modulo, setModulo] = useState("financeiro");
+  const [sessao,  setSessao]  = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [modulo,  setModulo]  = useState("financeiro");
 
-  // Data shared with popup — read from localStorage directly
-  // (ControleFinanceiro manages these via usePersist; popup just reads)
-  const [dadosPopup, setDadosPopup] = useState({ contas:[], transactions:[], orcamentos:[], metas:[] });
-
+  // Escuta mudanças de sessão do Supabase
   useEffect(() => {
-    if (logado) {
-      setDadosPopup({
-        contas:       readLS("contas",    []),
-        transactions: readLS("tx",        []),
-        orcamentos:   readLS("orc",       []),
-        metas:        readLS("metas",     []),
-      });
-    }
-  }, [logado]);
+    // Sessão inicial
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSessao(session);
+      setLoading(false);
+    });
 
-  const logout = () => {
-    localStorage.removeItem("ff_auth");
-    setLogado(false);
+    // Listener de auth (login, logout, token refresh)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSessao(session);
+      setLoading(false);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const logout = async () => {
+    await supabase.auth.signOut();
+    setSessao(null);
   };
 
-  if (!logado) {
-    return <TelaLogin onLogin={() => setLogado(true)} />;
+  // Carregando sessão
+  if (loading) {
+    return (
+      <div style={{ minHeight:"100vh", background:"#F7F5F1", display:"flex", alignItems:"center", justifyContent:"center", fontFamily:"'DM Sans',sans-serif" }}>
+        <div style={{ textAlign:"center", color:"#A09080" }}>
+          <div style={{ fontSize:32, marginBottom:12 }}>₿</div>
+          <div>Carregando FinFlow...</div>
+        </div>
+      </div>
+    );
   }
 
+  // Não logado
+  if (!sessao) {
+    return <TelaLogin onLogin={() => {}} />;
+  }
+
+  // Logado
   return (
     <div>
-      {/* Popup aparece logo após o login, lê dados do localStorage */}
-      <PopupNotificacoes
-        contas={dadosPopup.contas}
-        transactions={dadosPopup.transactions}
-        orcamentos={dadosPopup.orcamentos}
-        metas={dadosPopup.metas}
-      />
+      <PopupNotificacoes userId={sessao.user.id} />
 
       {/* Switcher de módulo + logout */}
       <div style={{
@@ -73,7 +78,12 @@ export default function App() {
           color:       modulo==="canal" ? "#FFF"    : "#9A9080",
         }}>📹 Canais</button>
 
-        <div style={{width:1, height:20, background:"#E8E3DB"}}/>
+        <div style={{ width:1, height:20, background:"#E8E3DB" }}/>
+
+        {/* Info do usuário */}
+        <span style={{ fontSize:12, color:"#A09080", maxWidth:140, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+          {sessao.user.email}
+        </span>
 
         <button onClick={logout} title="Sair" style={{
           border:"none", borderRadius:10, padding:"8px 10px",
@@ -82,8 +92,8 @@ export default function App() {
         }}>🔒</button>
       </div>
 
-      {modulo==="financeiro" && <ControleFinanceiro />}
-      {modulo==="canal"      && <PaginaCanal />}
+      {modulo==="financeiro" && <ControleFinanceiro userId={sessao.user.id} />}
+      {modulo==="canal"      && <PaginaCanal       userId={sessao.user.id} />}
     </div>
   );
 }
